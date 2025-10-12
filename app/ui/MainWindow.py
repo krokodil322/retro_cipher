@@ -44,7 +44,7 @@ class MainWindow(QMainWindow):
         # файловый менеджер
         self.file_manager = None
     
-    def _init_interface(self):
+    def _init_interface(self) -> None:
         """Инициализация кнопок и интерфейса"""
         # главный задний фон
         self.background_1 = QLabel(self)
@@ -193,27 +193,27 @@ class MainWindow(QMainWindow):
             self.__dict__[function + "_btn"].setIcon(QIcon(pixmap)) 
         return wrapper
         
-    def close_(self):
+    def close_(self) -> None:
         """Выключение программы"""
         self.close()
     
-    def collapse(self):
+    def collapse(self) -> None:
         """Сворачивание программы"""
         self.showMinimized()
     
-    def enter(self):
+    def enter(self) -> None:
         """Ввод. Главным образом - ввод пароля"""
         print("enter")
         
-    def help_(self):
+    def help_(self) -> None:
         """Кнопка помощи"""
         print("help")
     
-    def settings(self):
+    def settings(self) -> None:
         """Кнопка настроек"""
         print("settings")
         
-    def change(self):
+    def change(self) -> None:
         """Кнопка выбора файла для шифроки / разшифровки"""
         # эта часть нужна чтобы обновить дерево файлов
         # при помторном нажатии на кнопку change
@@ -332,19 +332,16 @@ class MainWindow(QMainWindow):
         # Сигнал при раскрытии узла
         self.tree.itemExpanded.connect(self.on_item_expanded)
         self.tree.itemCollapsed.connect(self.on_item_collapsed)
-    
-    def on_item_expanded(self, item):
+
+    def on_item_expanded(self, item) -> None:
         """Загружаем содержимое директории при раскрытии"""
-        path = item.text(1)
-        # Если уже подгружено, выходим
-        if item.childCount() > 0 and item.child(0).text(0) != "…":
-            return
+        path = item.text(1).replace('/', '\\')
         # Очищаем старые "заглушки"
         item.takeChildren()
         try:
             files = os.listdir(path)
-            self._scroll_width_compensator.add_dir(path)
-            self._scroll_width_compensator.add_child(path, item)            
+            self._scroll_width_compensator.add_dir(path, self.tree.indentation())
+            self._scroll_width_compensator.add_child(path, item)
             for entry in files:
                 full_path = os.path.join(path, entry)
                 child = QTreeWidgetItem([entry, full_path])
@@ -354,25 +351,26 @@ class MainWindow(QMainWindow):
                 item.addChild(child)
             scroll_size = self._scroll_width_compensator.max_len
             self.tree.setColumnWidth(0, scroll_size)
+            # пересчет ширины. ИМБА!
+            self.tree.resizeColumnToContents(0)
         except PermissionError:
             pass
 
-    def on_item_collapsed(self, item):
-        path = item.text(1)
+    def on_item_collapsed(self, item) -> None:
+        path = item.text(1).replace('/', '\\')
         subdirs = self._scroll_width_compensator.get_subdirs(path)
         for subdir, item in subdirs:
-            print(f"SUBDIR: {subdir}")
             self._scroll_width_compensator.remove_dir(subdir)
             self.tree.collapseItem(item)
         scroll_size = self._scroll_width_compensator.max_len
-        print(f"SIZE COLLAPSED: {scroll_size}")
         self.tree.setColumnWidth(0, scroll_size)
+        self.tree.resizeColumnToContents(0)
 
-    def logs(self):
+    def logs(self) -> None:
         """кнопка логов LG"""
         print("logs")
         
-    def list_(self):
+    def list_(self) -> None:
         """кнопка списка зашифрованных файлов LS"""
         print("list")
 

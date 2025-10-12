@@ -1,3 +1,4 @@
+from PyQt5.QtWidgets import QTreeWidgetItem
 from PyQt5.QtGui import QFont, QFontMetrics
 import os
 
@@ -22,22 +23,18 @@ class ScrollCompensator:
             return self.expanded[key]["size"]
         return 0
     
-    def add_dir(self, path_dir) -> None:
+    def add_dir(self, path_dir: str, indent) -> None:
         """Добавляет путь к раскрытой папке и ищет файл с самым длинным именем в этой папке"""
         files  = os.listdir(path_dir)
-        compensator = 0
-        max_filename = ''
-        if files:
-            max_filename = max(files, key=len)
-            compensator = 300
+        max_filename = max(files, key=len) if files else ''
         level = len(path_dir.split('/')) + 2
         full_path = os.path.join(path_dir, max_filename)
-        size = len(full_path) * level + compensator * level
+        pixels = self.font_metric.horizontalAdvance(full_path)
+        size = pixels + level + indent + 20
         self.expanded[path_dir] = {"size": size}
-        print(f"ADD EXPANDED {self.expanded}")
 
-    def add_child(self, path, item):
-        self.expanded[path]["item"] = item 
+    def add_child(self, path_dir: str, obj_dir: QTreeWidgetItem):
+        self.expanded[path_dir]["item"] = obj_dir 
     
     def remove_dir(self, path_dir) -> None:
         """Удаляет путь к папке которую уже закрыли"""
@@ -46,16 +43,18 @@ class ScrollCompensator:
         # что-то шаманит под капотом
         if path_dir in self:
             del self.expanded[path_dir]
-            print(f"ADD REMOVED {self.expanded}")
     
     def get_subdirs(self, path_dir: str) -> list:
         """Получает всех раскрытых потомков раскрытой папки path_dir"""
         subdirs = []
         for dir_ in self:
-            if path_dir in dir_:
+            if path_dir in dir_ and path_dir is not dir_:
                 subdirs.append((dir_, self.expanded[dir_]["item"]))
         subdirs.reverse()
         return subdirs
+    
+    def __str__(self):
+        return f"[{', '.join(self)}]"
         
     def __iter__(self):
         """Для удобства итерируемся по всем открытым папкам"""
