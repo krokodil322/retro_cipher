@@ -1,8 +1,15 @@
 from PyQt5.QtWidgets import QMainWindow, QLabel, QPushButton, QTreeWidgetItem, QTreeWidget, QWidget, QVBoxLayout
-from PyQt5.QtCore import Qt, QSize, QRect
+from PyQt5.QtCore import Qt, QSize, QRect, QUrl
 from PyQt5.QtGui import QPixmap, QIcon, QFont, QFontMetrics
-from app.core import FileManager, ScrollCompensator
+from PyQt5.QtMultimedia import QSoundEffect
+
+from playsound import playsound
+from time import sleep
+import threading
 import os
+
+from app.core import FileManager, ScrollCompensator
+from app.paths import BACKGROUNDS_DIR, SOUNDS_DIR, STYLES_DIR, BUTTONS_DIR
 
 
 class MainWindow(QMainWindow):
@@ -44,24 +51,30 @@ class MainWindow(QMainWindow):
         # файловый менеджер
         self.file_manager = None
     
-    def _init_interface(self) -> None:
+    def _init_interface(self, theme: str="retro_1") -> None:
         """Инициализация кнопок и интерфейса"""
+        themes = {
+            "retro_1": {
+                "background_1": "background_1.png",
+                "top_bar": "top_panel.png",
+                "background_2": "background_2.png",
+                "monitor": ""
+            }
+        }
+        
         # главный задний фон
         self.background_1 = QLabel(self)
-        self.background_1.setPixmap(QPixmap(r"interface/images/background_1.png"))
+        self.background_1.setPixmap(QPixmap(os.path.join(BACKGROUNDS_DIR, "background_1.png")))
         self.background_1.setScaledContents(True)
         self.background_1.setGeometry(0, 0, self.width(), self.height())
         self.setWindowFlags(Qt.FramelessWindowHint)
         
         # верхняя панель, где расположены кнопки сворачивания и выключения
         self.top_bar = QLabel(self)
-        self.top_bar.setPixmap(QPixmap(r"interface/images/top_panel.png"))
+        self.top_bar.setPixmap(QPixmap(os.path.join(BACKGROUNDS_DIR, "top_panel.png")))
         self.top_bar.setScaledContents(True)
         self.top_bar.setGeometry(14, 12, 441, 34)  # позиция и размер
         
-        # шрифт
-        self.font = QFont("IBM 3270", 14)
-        self.font.setBold(True)
         # тут может быть надпись на верхней панели
         # self.title = QLabel("CryptoFredi_16_bit.exe", self)
         # self.title.setFont(self.font)
@@ -71,19 +84,19 @@ class MainWindow(QMainWindow):
         
         # второй задний фон для монитора и кнопки enter
         self.background_2 = QLabel(self)
-        self.background_2.setPixmap(QPixmap(r"interface/images/background_2.png"))
+        self.background_2.setPixmap(QPixmap(os.path.join(BACKGROUNDS_DIR, "background_2.png")))
         self.background_2.setScaledContents(True)
         self.background_2.setGeometry(14, 54, 355, 430)
 
         # дисплей на который будет выводится информация для пользователя
         self.monitor = QLabel(self)
-        self.monitor.setPixmap(QPixmap(r"interface/images/monitor.png"))
+        self.monitor.setPixmap(QPixmap(os.path.join(BACKGROUNDS_DIR, "monitor.png")))
         self.monitor.setScaledContents(True)
         self.monitor.setGeometry(33, 73, 317, 313)
         
         # кнопка сворачивания программы
         self.collapse_btn = QPushButton(self)
-        pixmap = QPixmap(r"interface/images/collapse_default.png")
+        pixmap = QPixmap(os.path.join(BUTTONS_DIR, "collapse_default.png"))
         collapse_btn_icon = QIcon(pixmap)
         self.collapse_btn.setIcon(collapse_btn_icon)
         self.collapse_btn.setIconSize(pixmap.size())
@@ -94,7 +107,7 @@ class MainWindow(QMainWindow):
         
         # кнопки выключения программы
         self.close_btn = QPushButton(self)
-        pixmap = QPixmap(r"interface/images/close_default.png")
+        pixmap = QPixmap(os.path.join(BUTTONS_DIR, "close_default.png"))
         close_btn_icon = QIcon(pixmap)
         self.close_btn.setIcon(close_btn_icon)
         self.close_btn.setIconSize(pixmap.size())
@@ -105,7 +118,7 @@ class MainWindow(QMainWindow):
         
         # кнопка ввода
         self.enter_btn = QPushButton(self)
-        pixmap = QPixmap(r"interface/images/enter_default.png")
+        pixmap = QPixmap(os.path.join(BUTTONS_DIR, "enter_default.png"))
         enter_btn_icon = QIcon(pixmap)
         self.enter_btn.setIcon(enter_btn_icon)
         self.enter_btn.setIconSize(pixmap.size())
@@ -116,7 +129,7 @@ class MainWindow(QMainWindow):
         
         # кнопка помощи и общей информации о программе (H)
         self.help_btn = QPushButton(self)
-        pixmap = QPixmap(r"interface/images/help_default.png")
+        pixmap = QPixmap(os.path.join(BUTTONS_DIR, "help_default.png"))
         help_btn_icon = QIcon(pixmap)
         self.help_btn.setIcon(help_btn_icon)
         self.help_btn.setIconSize(pixmap.size())
@@ -127,7 +140,7 @@ class MainWindow(QMainWindow):
         
         # кнопка настроек (ST)
         self.settings_btn = QPushButton(self)
-        pixmap = QPixmap(r"interface/images/settings_default.png")
+        pixmap = QPixmap(os.path.join(BUTTONS_DIR, "settings_default.png"))
         settings_btn_icon = QIcon(pixmap)
         self.settings_btn.setIcon(settings_btn_icon)
         self.settings_btn.setIconSize(pixmap.size())
@@ -138,7 +151,7 @@ class MainWindow(QMainWindow):
         
         # кнопка выбора файла (CG)
         self.change_btn = QPushButton(self)
-        pixmap = QPixmap(r"interface/images/change_default.png")
+        pixmap = QPixmap(os.path.join(BUTTONS_DIR, "change_default.png"))
         change_btn_icon = QIcon(pixmap)
         self.change_btn.setIcon(change_btn_icon)
         self.change_btn.setIconSize(pixmap.size())
@@ -149,7 +162,7 @@ class MainWindow(QMainWindow):
         
         # кнопка для показа логов (LG)
         self.logs_btn = QPushButton(self)
-        pixmap = QPixmap(r"interface/images/logs_default.png")
+        pixmap = QPixmap(os.path.join(BUTTONS_DIR, "logs_default.png"))
         logs_btn_icon = QIcon(pixmap)
         self.logs_btn.setIcon(logs_btn_icon)
         self.logs_btn.setIconSize(pixmap.size())
@@ -160,7 +173,7 @@ class MainWindow(QMainWindow):
         
         # кнопка для списка зашифрованных файлов (LS)
         self.list_btn = QPushButton(self)
-        pixmap = QPixmap(r"interface/images/list_default.png")
+        pixmap = QPixmap(os.path.join(BUTTONS_DIR, "list_default.png"))
         list_btn_icon = QIcon(pixmap)
         self.list_btn.setIcon(list_btn_icon)
         self.list_btn.setIconSize(pixmap.size())
@@ -168,6 +181,15 @@ class MainWindow(QMainWindow):
         self.list_btn.resize(78, 78)
         self.list_btn.pressed.connect(self._function_btn_pressed("list"))
         self.list_btn.released.connect(self._function_btn_released("list"))
+        
+        self.btn_press_eff = QSoundEffect()
+        self.btn_press_eff.setSource(QUrl.fromLocalFile(os.path.join(SOUNDS_DIR, "button.wav")))
+        self.tree_expand_eff = QSoundEffect()
+        self.tree_expand_eff.setSource(QUrl.fromLocalFile(os.path.join(SOUNDS_DIR, "tree_expand.wav")))
+        self.close_collapse_btn_press_eff = QSoundEffect()
+        self.close_collapse_btn_press_eff.setSource(
+            QUrl.fromLocalFile(os.path.join(SOUNDS_DIR, "collapse_close_button.wav"))
+        )
     
     def _function_btn_released(self, function: str) -> None:
         """
@@ -179,7 +201,7 @@ class MainWindow(QMainWindow):
             Вызывает функцию привязанную к кнопке.
         """
         def wrapper():
-            relative_path = os.path.join(self._icon_path, function + "_default")
+            relative_path = os.path.join(BUTTONS_DIR, function + "_default")
             pixmap = QPixmap(relative_path)
             self.__dict__[function + "_btn"].setIcon(QIcon(pixmap)) 
             if function in self._functions_btns:
@@ -188,33 +210,50 @@ class MainWindow(QMainWindow):
         
     def _function_btn_pressed(self, function: str) -> None:
         def wrapper():
-            relative_path = os.path.join(self._icon_path, function + "_pressed")
+            relative_path = os.path.join(BUTTONS_DIR, function + "_pressed")
             pixmap = QPixmap(relative_path)
             self.__dict__[function + "_btn"].setIcon(QIcon(pixmap)) 
         return wrapper
         
     def close_(self) -> None:
         """Выключение программы"""
+        # self.close_collapse_btn_press_eff.play()
+        path = os.path.join(SOUNDS_DIR, "collapse_close_button.wav")
+        threading.Thread(target=lambda: playsound(path), daemon=True).start()
+        # небольшая задержка, дабы звук успел воспроизвестись перед завершением программы
+        sleep(0.13)
         self.close()
     
     def collapse(self) -> None:
         """Сворачивание программы"""
+        self.close_collapse_btn_press_eff.play()
         self.showMinimized()
     
     def enter(self) -> None:
         """Ввод. Главным образом - ввод пароля"""
+        self.btn_press_eff.play()
+
         print("enter")
         
     def help_(self) -> None:
         """Кнопка помощи"""
+        self.btn_press_eff.play()
         print("help")
     
     def settings(self) -> None:
         """Кнопка настроек"""
+        self.btn_press_eff.play()
         print("settings")
         
     def change(self) -> None:
         """Кнопка выбора файла для шифроки / разшифровки"""
+        # к сожалению воспроизведение звуков через QSoundEffect
+        # в этом методе происходит с задержкой. Попытки реализовать
+        # воспроизведение через пул не получилось. PyQt категорически
+        # запрещает забивать поток чем то еще. А потому вопсроизводить
+        # звук будем через костыль из модулeq playsound и threading
+        path = os.path.join(SOUNDS_DIR, "button.wav")
+        threading.Thread(target=lambda: playsound(path), daemon=True).start()
         # эта часть нужна чтобы обновить дерево файлов
         # при помторном нажатии на кнопку change
         if self.monitor.layout():
@@ -229,76 +268,19 @@ class MainWindow(QMainWindow):
                 QWidget().setLayout(layout)
         # инициализация компенсатора скроллбара
         self._scroll_width_compensator = ScrollCompensator()
-
         # Создаём вспомогательный контейнер для дерева
         container = QWidget()
         container_layout = QVBoxLayout()
         container.setLayout(container_layout)
-        
         # дерево файлов
         self.tree = QTreeWidget()
         self.tree.setGeometry(QRect(38, 78, 317, 313))
-        
         # добавляем дерево в вспомогательный контейнер
         container_layout.addWidget(self.tree)
-        
         # задаем нужный стиль для дерева файлов
-        self.tree.setStyleSheet("""
-            QTreeView {
-                background: transparent;
-                border: none;
-                color: black;
-                font-family: IBM 3270;
-                font-size: 12pt;
-                font-weight: bold;
-            }
-            QTreeView::branch {
-                background: transparent;
-            }
-            QTreeView::item {
-                background: transparent;
-            }
-        
-            /* Вертикальный скроллбар */
-            QScrollBar:vertical {
-                border: none;
-                background: rgba(0,0,0,50);
-                width: 8px;
-                margin: 0px 0px 0px 0px;
-                border-radius: 6px;
-            }
-            QScrollBar::handle:vertical {
-                background: rgb(39,107,3);
-                min-height: 20px;
-                border-radius: 6px;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-                height: 0px;  /* скрыть стрелки */
-            }
-            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
-                background: none;
-            }
-        
-            /* Горизонтальный скроллбар */
-            QScrollBar:horizontal {
-                border: none;
-                background: rgba(0,0,0,50);
-                height: 8px;
-                margin: 0px 0px 0px 0px;
-                border-radius: 6px;
-            }
-            QScrollBar::handle:horizontal {
-                background: rgb(39,107,3);
-                min-width: 20px;
-                border-radius: 6px;
-            }
-            QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-                width: 0px;  /* скрыть стрелки */
-            }
-            QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
-                background: none;
-            }
-        """)
+        with open(os.path.join(STYLES_DIR, "tree_style.css"), encoding="utf-8") as tree_style:
+            tree_style = tree_style.read()
+            self.tree.setStyleSheet(tree_style)
         # настройка дерева
         # убирает треугольники для раскрытия
         self.tree.setRootIsDecorated(False)
@@ -316,25 +298,22 @@ class MainWindow(QMainWindow):
         self.tree.setIconSize(QSize(0, 0))  
         # измеряем размер дерева через его шрифт
         self.font_metric = QFontMetrics(self.tree.font())
-        
         # Создаём вспомогательный контейнер для монитора
         monitor_layout = QVBoxLayout()
         self.monitor.setLayout(monitor_layout)
         monitor_layout.setContentsMargins(0, 0, 0, 0)
         monitor_layout.addWidget(container)
-        
         # объект файлового менеджера
         self.file_manager = FileManager(self.tree)
-        
          # Добавляем все диски
         self.file_manager.add_drives()
-
         # Сигнал при раскрытии узла
         self.tree.itemExpanded.connect(self.on_item_expanded)
         self.tree.itemCollapsed.connect(self.on_item_collapsed)
 
     def on_item_expanded(self, item) -> None:
         """Загружаем содержимое директории при раскрытии"""
+        self.tree_expand_eff.play()
         path = item.text(1).replace('/', '\\')
         # Очищаем старые "заглушки"
         item.takeChildren()
@@ -357,6 +336,7 @@ class MainWindow(QMainWindow):
             pass
 
     def on_item_collapsed(self, item) -> None:
+        self.tree_expand_eff.play()
         path = item.text(1).replace('/', '\\')
         subdirs = self._scroll_width_compensator.get_subdirs(path)
         for subdir, item in subdirs:
@@ -368,10 +348,12 @@ class MainWindow(QMainWindow):
 
     def logs(self) -> None:
         """кнопка логов LG"""
+        self.btn_press_eff.play()
         print("logs")
         
     def list_(self) -> None:
         """кнопка списка зашифрованных файлов LS"""
+        self.btn_press_eff.play()
         print("list")
 
     def mousePressEvent(self, event):
