@@ -1,15 +1,113 @@
-from PyQt5.QtWidgets import QMainWindow, QLabel, QPushButton, QTreeWidgetItem, QTreeWidget, QWidget, QVBoxLayout
-from PyQt5.QtCore import Qt, QSize, QRect, QUrl
-from PyQt5.QtGui import QPixmap, QIcon, QFont, QFontMetrics
+from PyQt5.QtWidgets import QMainWindow, QLabel, QPushButton, QPlainTextEdit, QTreeWidgetItem, QTreeWidget, QWidget, QVBoxLayout
+from PyQt5.QtCore import Qt, QSize, QRect, QUrl, QTimer
+from PyQt5.QtGui import QPixmap, QIcon, QFontMetrics, QPalette, QColor, QPainter, QTextCursor
 from PyQt5.QtMultimedia import QSoundEffect
 
 from playsound import playsound
 from time import sleep
 import threading
+import json
 import os
 
-from app.core import FileManager, ScrollCompensator
-from app.paths import BACKGROUNDS_DIR, SOUNDS_DIR, STYLES_DIR, BUTTONS_DIR
+from app.core import FileManager, ScrollCompensator, Cipher
+from app.paths import BACKGROUNDS_DIR, SOUNDS_DIR, STYLES_DIR, BUTTONS_DIR, CONFIG_DIR, ICONS_DIR
+
+
+from PyQt5.QtWidgets import QTextEdit, QLabel
+from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QPixmap, QPainter
+
+from PyQt5.QtWidgets import QTextEdit, QLabel
+from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QPixmap
+
+
+
+class ImageCursorTextEdit(QTextEdit):
+    def __init__(self, cursor_image_path, parent=None, max_len: int=30):
+        super().__init__(parent)
+        # отключаем стандартный курсор
+        self.setCursorWidth(0)
+        # QLabel-курсор поверх QTextEdit
+        self.cursor_label = QLabel(self.viewport())
+        self.cursor_label.setPixmap(QPixmap(cursor_image_path))
+        self.cursor_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.cursor_label.hide()
+        # Таймер мигания
+        self.cursor_visible = True
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.toggle_cursor)
+        self.timer.start(500)
+        # Слежение за позицией курсора
+        self.cursorPositionChanged.connect(self.update_cursor_pos)
+        self.textChanged.connect(self.update_cursor_pos)
+        # ограничение длины вводимого пароля равен 30 символам
+        self.max_len = max_len
+        # сюда будем записывать пароль
+        self.password = ''
+
+    def toggle_cursor(self):
+        if not self.hasFocus():
+            self.cursor_label.hide()
+            return
+        self.cursor_visible = not self.cursor_visible
+        self.cursor_label.setVisible(self.cursor_visible)
+
+    def update_cursor_pos(self):
+        """Перемещает QLabel-курсор в позицию QTextCursor."""
+        cr = self.cursorRect()
+        if cr.isNull():
+            return
+        pixmap = self.cursor_label.pixmap()
+        if pixmap is None or pixmap.isNull():
+            return
+        # вычисляем положение курсора по базовой линии текста
+        baseline_offset = int(self.fontMetrics().ascent() * 0.1)
+        x = cr.left()
+        y = cr.bottom() - pixmap.height() - baseline_offset
+        # Обновляем позицию и поднимаем курсор на передний план
+        self.cursor_label.move(x, y)
+        self.cursor_label.raise_()
+        if self.hasFocus():
+            self.cursor_label.show()
+
+    def focusInEvent(self, event):
+        super().focusInEvent(event)
+        self.cursor_label.show()
+        self.update_cursor_pos()
+
+    def focusOutEvent(self, event):
+        super().focusOutEvent(event)
+        self.cursor_label.hide()
+    
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter) or event.text() == ' ':
+            # игнорируем Enter
+            event.ignore()
+            return None
+        # Проверяем длину перед вводом
+        if len(self.toPlainText()) >= self.max_len and event.text():
+            # Разрешаем только Backspace, Delete, стрелки и т.п.
+            if event.key() not in (Qt.Key_Backspace, Qt.Key_Delete, Qt.Key_Left, Qt.Key_Right):
+                # игнорируем ввод новых символов
+                return None
+        if event.key() != Qt.Key_Backspace:
+            self.password += event.text()
+        else:
+            if self.password:
+                self.password = self.password[:-1]
+        # отображаем звёздочки вместо реальных символов
+        self.setPlainText("*" * len(self.password))
+    
+        # курсор всегда в конце
+        cursor = self.textCursor()
+        cursor.movePosition(cursor.End)
+        self.setTextCursor(cursor)
+
+    def insertFromMimeData(self, source):
+        # предотвращаем вставку многострочного текста
+        text = source.text().replace("\n", " ").replace("\r", "")
+        self.insertPlainText(text)
 
 
 class MainWindow(QMainWindow):
@@ -17,7 +115,6 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         # ссылка на папку с отрисованным интерфейсом
-        self._icon_path = r"interface/images"
         self.resize(467, 496)
         # инициализация кнопок
         self._init_interface()
@@ -39,7 +136,12 @@ class MainWindow(QMainWindow):
         self._old_pos = None
         # авторизирован ли пользователь
         # ввод пароля там тырым пырым
-        self.authorization = False
+        self.is_auth = False
+        # зарегестрирован ли пользователь
+        # определяется есть файл json с хэшэм пароля
+        self.is_regist = False
+        # повтор для ввода пароля, дабы подтветрдить
+        self.is_retry = False
         # компенастор нижнего скроллбара
         self._scroll_width_compensator = None
         # файловая модель
@@ -50,7 +152,14 @@ class MainWindow(QMainWindow):
         self.font_metric = None
         # файловый менеджер
         self.file_manager = None
-    
+        # поле ввода пароля
+        self.pswd_field = None
+        # пароль
+        self.password = None
+        # self._authorization()
+        self.set_pswd_widgets()
+        self._disable_btns()
+        
     def _init_interface(self, theme: str="retro_1") -> None:
         """Инициализация кнопок и интерфейса"""
         themes = {
@@ -93,6 +202,13 @@ class MainWindow(QMainWindow):
         self.monitor.setPixmap(QPixmap(os.path.join(BACKGROUNDS_DIR, "monitor.png")))
         self.monitor.setScaledContents(True)
         self.monitor.setGeometry(33, 73, 317, 313)
+        
+        # текстовое поле монитора
+        self.monitor_field = QWidget(self)
+        self.monitor_field.setGeometry(33, 73, 317, 313)
+        self.monitor_field.setStyleSheet("background: transparent;")
+        self.monitor_field.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.monitor_field.setStyleSheet("background-repeat: no-repeat; background-position: center;")
         
         # кнопка сворачивания программы
         self.collapse_btn = QPushButton(self)
@@ -190,6 +306,55 @@ class MainWindow(QMainWindow):
         self.close_collapse_btn_press_eff.setSource(
             QUrl.fromLocalFile(os.path.join(SOUNDS_DIR, "collapse_close_button.wav"))
         )
+        self._btns = [self.help_btn, self.settings_btn, self.change_btn, self.logs_btn, self.list_btn]
+    
+    def set_pswd_widgets(self, flag: str="default") -> None:
+        if not hasattr(self, "pswd_msg"):
+            if os.path.exists(os.path.join(CONFIG_DIR, "config.json")):
+                self.pswd_msg = QLabel("Введи пароль: ", self.monitor_field)
+            else:
+                self.pswd_msg = QLabel("Придумай пароль: ", self.monitor_field)
+        self.pswd_msg.setStyleSheet("""
+            color: black;
+            font-family: 'IBM 3270';
+            font-size: 12pt;
+            background: transparent;
+        """)
+        self.pswd_msg.move(20, 10)
+        self.pswd_msg.resize(300, 15)
+        # Поле ввода (наш кастомный QTextEdit)
+        cursor_path = os.path.join(ICONS_DIR, "cursor.png")
+        if self.pswd_field:
+            # обновляем поле пароля(убираем старые введенные данные)
+            self.pswd_msg.setText('')
+            self.pswd_field.password = ''
+            # устанавливаем старый фокус каретки на место
+            self.pswd_field.setFocus()
+        self.pswd_field = ImageCursorTextEdit(cursor_path, parent=self.monitor_field)
+        self.pswd_field.setGeometry(20, 30, 280, 40)
+        self.pswd_field.setStyleSheet("""
+            QTextEdit {
+                background: transparent;
+                color: black;
+                border: none;
+                font-family: 'IBM 3270';
+                font-size: 12pt;
+            }
+        """)
+        self.pswd_field.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.pswd_field.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.pswd_field.setFocus()
+                
+    def _enable_btns(self) -> None:
+        """Разблокирует функциональные кнопки"""
+        if self.is_auth:
+            for btn in self._btns:
+                btn.setEnabled(True)
+        
+    def _disable_btns(self) -> None:
+        """Блокирует функциональные кнопки"""
+        for btn in self._btns:
+            btn.setEnabled(False)
     
     def _function_btn_released(self, function: str) -> None:
         """
@@ -232,9 +397,84 @@ class MainWindow(QMainWindow):
     def enter(self) -> None:
         """Ввод. Главным образом - ввод пароля"""
         self.btn_press_eff.play()
-
-        print("enter")
+        if self.tree:
+            item = self.tree.currentItem()
+            if item:
+                print(item.text(1))
+        config_path = os.path.join(CONFIG_DIR, "config.json")
+        # если папка configa была удалена
+        if not os.path.exists(CONFIG_DIR):
+            os.mkdir(CONFIG_DIR)
+        # если файл configa есть, то регистрация не нужна
+        elif os.path.exists(config_path):
+            self.is_regist = True
+        # процесс регистрации   
+        if not self.is_regist: 
+            # эта часть срабатыват уже после первого ввода пароля
+            # за инициализацю первого ввода отвечает метод set_pswd_widgets
+            if not self.is_retry:
+                # запрос на повтор ввода пароля, дабы убедиться в том,
+                # что юзер его верно ввел
+                self.password = self.pswd_field.password
+                # меняем статус пароля, говоря, что повтор сработал
+                self.is_retry = True
+                # обновляем текст на виджетах
+                self._update_msgs("Повтори пароль: ")
+                # выходим из метода
+                return None
+            # эта часть срабатывает в самом конце, если
+            # повторный ввод пароля совпал, то мы записываем
+            # хэш пароля в json файл
+            elif self.password == self.pswd_field.password:
+                self.password = self.pswd_field.password
+                hash_pswd = Cipher.hashing(self.password)
+                with open(config_path, 'w', encoding="utf-8") as json_file:
+                    config = {"hash_pswd": hash_pswd}
+                    json.dump(config, fp=json_file)
+                # меняем флаг регистрации чтобы эта ветка больше не срабатывала
+                self.is_regist = True
+                self._update_msgs("Welcome to the club body!")
+                # блокируем ввод пароля(я не знаю как его убрать)
+                self.pswd_field.setEnabled(False)
+                # выходим из функции
+                # тут мы разблокируем все функциональные кнопки, ибо
+                # пользователь зашел
+                self.pswd_msg.setParent(None)
+                self.pswd_field.setParent(None)
+                self._enable_btns()
+                return None
+            # если повтор пароля неверный, то делаем все заново
+            else:
+                self.password = None
+                self.is_retry = False
+                self._update_msgs("Введи пароль(не совпали): ")
+                return None
+        # если юзер уже зареган, крч тут авторизация
+        if self.is_regist and not self.is_auth:
+            # хэшируем введеный пароль и сравниваем его с хэшэм из jsona
+            hash_pswd = Cipher.hashing(self.pswd_field.password)
+            with open(config_path, encoding="utf-8") as json_file:
+                config = json.load(fp=json_file)
+            if hash_pswd == config["hash_pswd"]:
+                # в этой ветке разблокируем все кнопки и запускам основную прогу
+                self._update_msgs("Пароль подошел, ты красавчик Айзербаджан.")
+                self.pswd_field.setEnabled(False)
+                self.pswd_msg.setParent(None)
+                self.pswd_field.setParent(None)
+                self.is_auth = True
+                self._enable_btns()
+            # если введеный пароль не подошел
+            else:
+                self._update_msgs("Введи пароль(пароль не подошел): ")
+                return None
         
+    def _update_msgs(self, msg: str) -> None:
+        self.pswd_field.password = ''
+        self.pswd_field.setText('')
+        self.pswd_msg.setText("")
+        self.pswd_msg.setText(msg)
+        self.pswd_field.setFocus()
+     
     def help_(self) -> None:
         """Кнопка помощи"""
         self.btn_press_eff.play()
@@ -251,7 +491,7 @@ class MainWindow(QMainWindow):
         # в этом методе происходит с задержкой. Попытки реализовать
         # воспроизведение через пул не получилось. PyQt категорически
         # запрещает забивать поток чем то еще. А потому вопсроизводить
-        # звук будем через костыль из модулeq playsound и threading
+        # звук будем через костыль из модулeй playsound и threading
         path = os.path.join(SOUNDS_DIR, "button.wav")
         threading.Thread(target=lambda: playsound(path), daemon=True).start()
         # эта часть нужна чтобы обновить дерево файлов
@@ -300,6 +540,7 @@ class MainWindow(QMainWindow):
         self.font_metric = QFontMetrics(self.tree.font())
         # Создаём вспомогательный контейнер для монитора
         monitor_layout = QVBoxLayout()
+        # self.monitor.setParent(None)
         self.monitor.setLayout(monitor_layout)
         monitor_layout.setContentsMargins(0, 0, 0, 0)
         monitor_layout.addWidget(container)
