@@ -5,9 +5,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 ROOT_DIR = os.path.split(BASE_DIR)[0]
 CONFIG_DIR = os.path.join(ROOT_DIR, "config")
-if "config" not in os.listdir():
-    os.mkdir(CONFIG_DIR)
-
 RESOURCES_DIR = os.path.join(BASE_DIR, "resources")
 
 SOUNDS_DIR = os.path.join(RESOURCES_DIR, "sounds")
