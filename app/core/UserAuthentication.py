@@ -12,12 +12,12 @@ class UserAuthentication:
         self.config = self.config_obj.get_config()
         self.is_registered = False
         self.is_authorized = False
-        self.first_pswd = None
-        self.second_pswd = None
-        self.check_registered()
+        self.first_pswd: str
+        self.second_pswd: str
         
-    def check_registered(self) -> None:
+    def check_registered(self) -> bool:
         self.is_registered = False if not self.config else True
+        return self.is_registered
 
     def set_first_pswd(self, password: str) -> None:
         self.first_pswd = password
@@ -25,7 +25,7 @@ class UserAuthentication:
     def set_second_pswd(self, password: str) -> None:
         self.second_pswd = password
     
-    def registration(self) -> None:
+    def registration(self):
         """Метод отвечающий за статус регистрации юзера. Метод мутабельный будь внимателен"""
         # Если юзер накосячил с повтором ввода пароля, то в множестве будет 2 элемента
         if self.first_pswd == self.second_pswd:

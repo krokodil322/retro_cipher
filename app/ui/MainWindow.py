@@ -9,7 +9,9 @@ import threading
 import json
 import os
 
-from app.core import FileManager, Cipher, CustomCaretLineEdit, UserAuthentication, style_getter, font_getter, AuthState, Function, button_icon_getter, sound_getter, background_getter
+from pymsgbox import password
+
+from app.core import FileManager, Cipher, CustomCaretLineEdit, UserAuthentication, style_getter, font_getter, AuthState, Function, button_icon_getter, sound_getter, background_getter, AppController
 from app.paths import BACKGROUNDS_DIR, SOUNDS_DIR, BUTTONS_DIR
 
 # данный товарищ скипает авторизацию с регистрацией и сразу разблокирует кнопки
@@ -32,41 +34,31 @@ class MainWindow(QMainWindow):
         self._mouse_old_pos = None
         # файл шрифта
         self.font_family = "3270-Regular.ttf"
-        # аутентификатор
-        self.user_authenticator = UserAuthentication()
-        # файловый менеджер
-        self.file_manager = FileManager(monitor=self.monitor)
-        # шифровальщик
-        self.cipher = Cipher()
         # все ивенты в классе
-        self.EVENTS = {
-            AuthState.VIEW_WIDGETS: {"method": self._widgets_controll_authentication, "args": (), "kwargs": {}, "msg": None},
-            AuthState.REGISTRATION_PSWD: {"method": self.handle_registration, "args": (), "kwargs": {}, "msg": "Придумай пароль"},
-            AuthState.REGISTRATION_REPEAT_PSWD: {"method": self.handle_repeat_pswd_registration, "args": (), "kwargs": {}, "msg": "Повтори пароль"},
-            AuthState.REGISTRATION_FAILURE: {"method": self.handle_registration_failure, "args": (), "kwargs": {}, "msg": "Придумай пароль(Не совпали)"},
-            AuthState.AUTHORIZATION: {"method": self.handle_authorization, "args": (), "kwargs": {}, "msg": "Введи пароль"},
-            AuthState.AUTHORIZATION_FAILURE: {"method": self.handle_authorization, "args": (), "kwargs": {}, "msg": "Неправильный пароль"},
-            Function.NONE: {"method": self.enable_btns, "args": (), "kwargs": {}, "msg": None},
-            Function.CHANGE: {"method": self.change_released, "args": (), "kwargs": {}, "msg": "Выбери файл"},
-            Function.CHECK_FILE: {"method": self.file_manager.check_file, "args": (), "kwargs": {}, "msg": None},
-            Function.DECRYPT: {"method"}
-        }
-        # следующий вызов ивента используется в регистрации и авторизации
-        # для определения следующего этапа сценария
-        self.current_ivent = None
-        
-        # если юзер зареган
-        if not DEBUG:
-            self.disable_btns()
-            if self.user_authenticator.is_registered:
-                self.current_ivent = AuthState.AUTHORIZATION
-            else:
-                self.current_ivent = AuthState.REGISTRATION_PSWD
-            self._widgets_controll_authentication(title=self.EVENTS[self.current_ivent]["msg"])
-        else:
-            self.current_ivent = Function.NONE
-            self.enable_btns()
-            self.redirection_event()
+        # self.EVENTS = {
+        #     AuthState.VIEW_WIDGETS: {"method": self.widgets_controll_authentication, "args": (), "kwargs": {}, "msg": None},
+        #     AuthState.REGISTRATION_PSWD: {"method": self.handle_registration, "args": (), "kwargs": {}, "msg": "Придумай пароль"},
+        #     AuthState.REGISTRATION_REPEAT_PSWD: {"method": self.handle_repeat_pswd_registration, "args": (), "kwargs": {}, "msg": "Повтори пароль"},
+        #     AuthState.REGISTRATION_FAILURE: {"method": self.handle_registration_failure, "args": (), "kwargs": {}, "msg": "Придумай пароль(Не совпали)"},
+        #     AuthState.AUTHORIZATION: {"method": self.handle_authorization, "args": (), "kwargs": {}, "msg": "Введи пароль"},
+        #     AuthState.AUTHORIZATION_FAILURE: {"method": self.handle_authorization, "args": (), "kwargs": {}, "msg": "Неправильный пароль"},
+        #     Function.NONE: {"method": self.enable_btns, "args": (), "kwargs": {}, "msg": None},
+        #     Function.CHANGE: {"method": self.change_released, "args": (), "kwargs": {}, "msg": "Выбери файл"},
+        #     Function.CHECK_FILE: {"method": self.file_manager.check_file, "args": (), "kwargs": {}, "msg": None},
+        #     Function.DECRYPT: {"method"}
+        # }
+        self.cipher = Cipher()
+        self.user_auth = UserAuthentication()
+        self.file_manager = FileManager(monitor=self.monitor)
+        # контроллер всего приложения
+        self.controller = AppController(
+            user_auth=self.user_auth,
+            cipher=self.cipher,
+            file_manager=self.file_manager,
+            ui=self
+        )
+        self.disable_btns()
+        self.controller.define_event_authentication()
         
     def init_ui(self) -> None:
         """Инициализация кнопок и интерфейса"""        
@@ -201,16 +193,16 @@ class MainWindow(QMainWindow):
 
     def redirection_event(self) -> None:
         """Вызывает ивент в зависимости от текущего положения сценария"""
-        args = self.EVENTS[self.current_ivent]["args"]
-        kwargs = self.EVENTS[self.current_ivent]["kwargs"]
-        response = self.EVENTS[self.current_ivent]["method"](*args, **kwargs)
-        if self.current_ivent is Function.CHECK_FILE:
+        args = self.EVENTS[self.current_event]["args"]
+        kwargs = self.EVENTS[self.current_event]["kwargs"]
+        response = self.EVENTS[self.current_event]["method"](*args, **kwargs)
+        if self.current_event is Function.CHECK_FILE:
             if response is True:
-                self.current_ivent = Function.DECRYPT
+                self.current_event = Function.DECRYPT
             else:
-                self.current_ivent = Function.ENCRYPT
+                self.current_event = Function.ENCRYPT
             self.redirection_event()
-        elif self.current_ivent is Function.ENCRYPT:
+        elif self.current_event is Function.ENCRYPT:
             pass
         
     def enable_btns(self) -> None:
@@ -249,8 +241,8 @@ class MainWindow(QMainWindow):
     def change_released(self) -> None:
         """Запуска функции кнокпи change после нажатия"""
         self.change_btn.setIcon(button_icon_getter("change_default.png"))
-        self.current_ivent = Function.CHANGE
-        self.file_manager.set_tree()
+        self.enter_btn.setEnabled(True)
+        self.controller.change()
         
     def settings_pressed(self) -> None:
         """Запуска функции кнопки settings в момент нажатия"""
@@ -296,32 +288,56 @@ class MainWindow(QMainWindow):
     def enter_released(self) -> None:
         """Запуск функции кнопки enter после нажатия"""
         self.enter_btn.setIcon(button_icon_getter("enter_default.png"))
-        if self.current_ivent is Function.CHANGE:
-            self.current_ivent = Function.CHECK_FILE
-        self.redirection_event()
+        # if self.current_event is Function.CHANGE:
+        #     self.current_event = Function.CHECK_FILE
+        self.controller.callback_redirection()
 
-    def _widgets_controll_authentication(self, title) -> None:
-        if hasattr(self, "msg") and hasattr(self, "pswd_field"):
-            self.msg.clear()
-            self.pswd_field.clear()
-        self.msg = QLabel(self.monitor)
-        self.msg.setText(title)
-        self.msg.setGeometry(0, 0, 317, 40)
-        self.msg.setStyleSheet(style_getter("monitor_title.css"))
-        self.msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.msg.setFont(font_getter(self.font_family, 12))
-        self.msg.show()
-        self.pswd_field = QLineEdit(self.monitor)
-        self.pswd_field.setFont(font_getter(self.font_family, 12))
-        self.pswd_field.setGeometry(10, 40, 297, 20)
-        self.enter_btn.setEnabled(False)
-        self.pswd_field.textChanged.connect(self._change_text)
-        self.pswd_field.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.pswd_field.setStyleSheet(style_getter("password_field.css"))
-        self.pswd_field.setEchoMode(QLineEdit.EchoMode.Password)
-        # создаем таймер показа пароля
-        self.pswd_field.setFocus()
-        self.pswd_field.show()
+    def widgets_controll_tree(self) -> None:
+        self.controller.file_manager.set_tree()
+    
+    def widgets_controll_authentication(self, title: str='', is_clear: bool=False) -> None:
+        if not is_clear:
+            if hasattr(self, "msg") and hasattr(self, "pswd_field"):
+                self.msg.clear()
+                self.pswd_field.clear()
+                self.msg.setParent(None)
+                self.pswd_field.setParent(None)
+            self.msg = QLabel(self.monitor)
+            self.msg.setText(title)
+            self.msg.setGeometry(0, 0, 317, 40)
+            self.msg.setStyleSheet(style_getter("monitor_title.css"))
+            self.msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.msg.setFont(font_getter(self.font_family, 12))
+            self.msg.show()
+            self.pswd_field = QLineEdit(self.monitor)
+            self.pswd_field.setFont(font_getter(self.font_family, 12))
+            self.pswd_field.setGeometry(10, 40, 297, 20)
+            self.enter_btn.setEnabled(False)
+            self.pswd_field.textChanged.connect(self._change_text)
+            self.pswd_field.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.pswd_field.setStyleSheet(style_getter("password_field.css"))
+            self.pswd_field.setEchoMode(QLineEdit.EchoMode.Password)
+            # создаем таймер показа пароля
+            self.pswd_field.setFocus()
+            self.pswd_field.show()
+        else:
+            if not hasattr(self, "pswd_field") or not hasattr(self, "msg"):
+                raise AttributeError("Ты пытаешься удалить атрибуты msg и pswd_field которые еще не были созданы, либо уже были удалены.")
+            
+            # self.pswd_field.hide()
+            # self.msg.hide()
+            # self.pswd_field.deleteLater()
+            # self.msg.deleteLater()
+            self.pswd_field.setParent(None)
+            self.msg.setParent(None)
+            del self.pswd_field
+            del self.msg
+            print("Я тут перерисовываю monitor!")
+            # self.monitor.update()
+            # self.monitor.hide()
+            self.monitor.show()
+            self.enable_btns()
+            self.enter_btn.setEnabled(False)
     
     def _change_text(self) -> None:
         if len(self.pswd_field.text()) > 0:
@@ -329,48 +345,12 @@ class MainWindow(QMainWindow):
         else:
             self.enter_btn.setEnabled(False)
     
-    def handle_registration(self) -> None:
-        """Ивент запускающийся когда файл конфига пуст или удален И юзер впервый раз ввел пароль и нажал enter"""
-        self.current_ivent = AuthState.REGISTRATION_REPEAT_PSWD
-        self.user_authenticator.set_first_pswd(self.pswd_field.text())
-        self._widgets_controll_authentication(title=self.EVENTS[self.current_ivent]["msg"])
-
-    def handle_repeat_pswd_registration(self) -> None:
-        """Ивент запускающийся когда юзер повторно ввел пароль и нажал enter"""
-        self.user_authenticator.set_second_pswd(self.pswd_field.text())
-        self.user_authenticator.registration()
-        if self.user_authenticator.is_registered:
-            self.current_ivent = AuthState.AUTHORIZATION
-        else:
-            self.current_ivent = AuthState.REGISTRATION_FAILURE
-        self._widgets_controll_authentication(title=self.EVENTS[self.current_ivent]["msg"])
-    
-    def handle_registration_failure(self) -> None:
-        """Ивент запускающийся когда юзер неправильно повторил пароль и нажал enter"""
-        self.current_ivent = AuthState.REGISTRATION_REPEAT_PSWD
-        self.user_authenticator.set_first_pswd(self.pswd_field.text())
-        self._widgets_controll_authentication(title=self.EVENTS[self.current_ivent]["msg"])
-    
-    def handle_authorization(self) -> None:
-        """Ивент запускающийся при авторизации"""
-        self.user_authenticator.set_first_pswd(self.pswd_field.text())
-        self.user_authenticator.authorization()
-        if self.user_authenticator.is_authorized:
-            self.current_ivent = Function.NONE
-            self.enter_btn.setEnabled(True)
-            self.pswd_field.setParent(None)            
-            self.msg.setParent(None)
-            self.monitor.show()
-            # добавляем хэш пароля в шифровщик
-            hash_pswd = self.cipher.hashing(self.pswd_field.text())
-            self.cipher.set_password(hash_pswd)
-            del self.pswd_field
-            del self.msg
-            self.redirection_event()
-        else:
-            self.current_ivent = AuthState.AUTHORIZATION_FAILURE
-            self._widgets_controll_authentication(title=self.EVENTS[self.current_ivent]["msg"])
-    
+    def get_input_password(self) -> str:
+        password = self.pswd_field.text()
+        if password:
+            return password
+        raise ValueError("Ты запрашиваешь пароль хотя он еще не введен!")
+        
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Для перемещения окна мышкой — шаг 1"""
         if event.button() == Qt.MouseButton.LeftButton:

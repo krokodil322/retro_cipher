@@ -13,10 +13,10 @@ import os
 class Cipher:
     def __init__(self):
         # хэш пароля из json
-        self.hash_pswd = None
+        self.hash_pswd: bytes
     
     def set_password(self, password: str) -> None:
-        self.hash_pswd = password
+        self.hash_pswd = password.encode("utf-8")
         self.init_fernet()
     
     def init_fernet(self, salt: bytes | None=None) -> None:

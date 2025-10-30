@@ -3,7 +3,7 @@ from PyQt6.QtCore import QRect, QSize, QUrl, Qt
 from PyQt6.QtMultimedia import QSoundEffect
 
 from app.core.getters import style_getter, sound_getter
-from app.core import CacheManager
+from app.core.CacheManager import CacheManager
 
 from ctypes import windll
 import string
