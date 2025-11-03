@@ -1,9 +1,11 @@
-from PyQt6.QtWidgets import QMainWindow, QLabel, QPushButton, QPlainTextEdit, QTreeWidgetItem, QTreeWidget, QWidget, QVBoxLayout, QScrollArea, QLineEdit
+from tkinter import CENTER
+from PyQt6.QtWidgets import QMainWindow, QLabel, QPushButton, QPlainTextEdit, QTreeWidgetItem, QTreeWidget, QWidget, QVBoxLayout, QScrollArea, QLineEdit, QHBoxLayout
 from PyQt6.QtCore import Qt, QSize, QRect, QUrl, QTimer
 from PyQt6.QtGui import QPixmap, QIcon, QFontMetrics, QPalette, QColor, QPainter, QTextCursor, QFont, QFontDatabase, QCursor, QMouseEvent
 from PyQt6.QtMultimedia import QSoundEffect
 
 from datetime import datetime
+from functools import partial
 import pickle
 import threading
 import json
@@ -20,7 +22,7 @@ DEBUG = True
 
 class MainWindow(QMainWindow):
     """Класс главного окна"""
-    def __init__(self):
+    def __init__(self, debug_mode: bool=False):
         super().__init__()
         # устанавливаем размер главного окна
         self.resize(467, 496)
@@ -57,8 +59,11 @@ class MainWindow(QMainWindow):
             file_manager=self.file_manager,
             ui=self
         )
-        self.disable_btns()
-        self.controller.define_event_authentication()
+        if not debug_mode:
+            self.disable_btns()
+            self.controller.define_event_authentication()
+        else:
+            self.controller.current_event = Function.NONE
         
     def init_ui(self) -> None:
         """Инициализация кнопок и интерфейса"""        
@@ -96,6 +101,7 @@ class MainWindow(QMainWindow):
         self.monitor = QLabel(self)
         self.monitor.setPixmap(background_getter("monitor.png"))
         self.monitor.setGeometry(33, 73, 317, 313)
+        # self.monitor.setCursor(Qt.CursorShape.ArrowCursor)
     
     def init_buttons(self) -> None:
         """Инициализация кнопок"""
@@ -292,16 +298,21 @@ class MainWindow(QMainWindow):
         #     self.current_event = Function.CHECK_FILE
         self.controller.callback_redirection()
 
+    def _widgets_controll_clear(self):
+        attrs = ("filename", "msg", "pswd_field")
+        for attr in attrs:
+            if hasattr(self, attr):
+                obj = getattr(self, attr)
+                obj.setParent(None)
+                delattr(self, attr)
+
     def widgets_controll_tree(self) -> None:
+        self._widgets_controll_clear()
         self.controller.file_manager.set_tree()
     
     def widgets_controll_authentication(self, title: str='', is_clear: bool=False) -> None:
         if not is_clear:
-            if hasattr(self, "msg") and hasattr(self, "pswd_field"):
-                self.msg.clear()
-                self.pswd_field.clear()
-                self.msg.setParent(None)
-                self.pswd_field.setParent(None)
+            self._widgets_controll_clear()
             self.msg = QLabel(self.monitor)
             self.msg.setText(title)
             self.msg.setGeometry(0, 0, 317, 40)
@@ -323,34 +334,50 @@ class MainWindow(QMainWindow):
         else:
             if not hasattr(self, "pswd_field") or not hasattr(self, "msg"):
                 raise AttributeError("Ты пытаешься удалить атрибуты msg и pswd_field которые еще не были созданы, либо уже были удалены.")
-            
-            # self.pswd_field.hide()
-            # self.msg.hide()
-            # self.pswd_field.deleteLater()
-            # self.msg.deleteLater()
             self.pswd_field.setParent(None)
             self.msg.setParent(None)
             del self.pswd_field
             del self.msg
             print("Я тут перерисовываю monitor!")
-            # self.monitor.update()
-            # self.monitor.hide()
             self.monitor.show()
             self.enable_btns()
             self.enter_btn.setEnabled(False)
     
+    def widgets_controll_check_file(self, title: str='') -> None:
+        # удалить старый виджет если есть
+        self._widgets_controll_clear()
+        # сообщение
+        self.msg = QLabel(self.monitor)
+        self.msg.setText(title)
+        self.msg.setGeometry(5, 10, 312, 12)
+        self.msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.msg.setFont(font_getter(self.font_family, 12))
+        self.msg.setStyleSheet("font-weight: bold;")
+        self.msg.show()
+        # текстовое поле для названия файла
+        self.filename = QPlainTextEdit(self.monitor)
+        self.filename.setReadOnly(True)
+        self.filename.setPlainText(self.file_manager.currentItem().text(0))
+        # Геометрия внутри дисплея (как у поля ввода раньше)
+        self.filename.setGeometry(5, 25, 312, 260)
+        # переноси строки вниз
+        self.filename.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        self.filename.setStyleSheet(style_getter("filename_field.css"))
+        self.filename.setFont(font_getter(self.font_family, 12))
+        self.filename.show()
+
     def _change_text(self) -> None:
         if len(self.pswd_field.text()) > 0:
             self.enter_btn.setEnabled(True)
         else:
             self.enter_btn.setEnabled(False)
-    
+
     def get_input_password(self) -> str:
         password = self.pswd_field.text()
         if password:
             return password
         raise ValueError("Ты запрашиваешь пароль хотя он еще не введен!")
-        
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Для перемещения окна мышкой — шаг 1"""
         if event.button() == Qt.MouseButton.LeftButton:
@@ -376,7 +403,7 @@ class MainWindow(QMainWindow):
             event.accept()
         else:
             event.ignore()
-    
+
         
 
 

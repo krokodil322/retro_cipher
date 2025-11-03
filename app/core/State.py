@@ -17,4 +17,5 @@ class Function(Enum):
     CHECK_FILE = auto()
     DECRYPT = auto()
     ENCRYPT = auto()
+    
 

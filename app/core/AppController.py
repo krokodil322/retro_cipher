@@ -14,6 +14,11 @@ class AppController:
         Подкапотный сценарист всего приложения
         Главным убразом управляет сценариями в приложении
         переключая на нужные методы.
+        Примерная схема организации данного проекта
+            MainWindow  <-- сообщает событие -->  AppController  <-- вызывает --> Cipher/FileManager/UserAuthentication
+            ↑                                                       |
+            |                                                       |
+            +---------------------- получает обновления ------------+
     """
     def __init__(
             self, 
@@ -94,7 +99,7 @@ class AppController:
                     "kwargs": {"is_clear": True}
                 },
                 "callback": {
-                    "function": None,
+                    "function": None, # в том месте просто callback не вызваем
                 }
             },
             Function.CHANGE: {
@@ -105,17 +110,40 @@ class AppController:
                 "callback": {
                     "function": self._get_tree_item,
                 }
+            },
+            Function.CHECK_FILE: {
+                "widgets": {
+                    "function": self.ui.widgets_controll_check_file,
+                    "kwargs": {"title": "Текущий файл"}
+                },
+                "callback": {
+                    "function": self._cryptography,
+                    "kwargs": {}
+                }
             }
         }
     
     def change(self) -> None:
         self.current_event = Function.CHANGE
-        # self.file_manager.set_tree()
-        # print("CHANGE GOOD")
         self._widgets_redirection()
+    
+    def _cryptography(self):
+        item = self.file_manager.currentItem()
+        path = item.text(1)
+        self.cipher.init_fernet()
+        self.cipher.encrypter(path)
     
     def _get_tree_item(self):
         print("Тут должен быть tree_item")
+        item = self.file_manager.currentItem()
+        if item:
+            path = item.text(1)
+            filename = item.text(0)
+            if filename.endswith((".txt", ".md")):
+                self.file_manager.tree.setParent(None)
+                self.current_event = Function.CHECK_FILE
+                print(f"Этот файл можно зашифровать: {path}")
+                self._widgets_redirection()
     
     def _widgets_redirection(self) -> None:
         event_obj = self.EVENTS[self.current_event]["widgets"]
@@ -162,6 +190,7 @@ class AppController:
             # добавляем хэш пароля в шифровщик
             hash_pswd = self.cipher.hashing(password)
             self.cipher.set_password(hash_pswd)
+            self.cipher.init_fernet()
         else:
             self.current_event = AuthState.AUTHORIZATION_FAILURE
         self._widgets_redirection()

@@ -14,12 +14,12 @@ class Cipher:
     def __init__(self):
         # хэш пароля из json
         self.hash_pswd: bytes
+        self.salt: bytes
     
     def set_password(self, password: str) -> None:
         self.hash_pswd = password.encode("utf-8")
-        self.init_fernet()
-    
-    def init_fernet(self, salt: bytes | None=None) -> None:
+
+    def init_fernet(self) -> None:
         """
             Инициализация и декларация fernet.
             Принимает salt - это соль для шифровки.
@@ -29,7 +29,7 @@ class Cipher:
             А потому придется пересоздавать fernet каждый раз.
             Если не передавать salt, то оно сгенерируется методом get_salt.
         """
-        self.salt = self.get_salt() if salt is None else salt
+        self.salt = self.get_salt()
         kdf = Scrypt(
             salt=self.salt,
             length=32,
@@ -72,13 +72,14 @@ class Cipher:
             Любая запись также будет просиходить построчно.
             path - это путь к файлу который нужно зашифровать
         """
+        print(self.fernet)
         temp_file_name = ''.join(map(choice, ascii_letters)) + ".txt"
         root = os.path.split(path)[0]
         temp_file_name = os.path.join(root, temp_file_name)
         with open(path, encoding="utf-8") as read_file, open(temp_file_name, 'w', encoding="utf-8") as write_file:
-            str_salt = self.salt.decode("utf-8")
+            # str_salt = self.salt.decode("utf-8")
             # первой строкой записываем соль
-            write_file.write(str_salt)
+            write_file.write(str(self.salt) + '\n')
             for row in read_file:
                 # перед шифровокой строку нужно перевести в байты
                 bytes_row = row.encode("utf-8")
@@ -87,18 +88,16 @@ class Cipher:
                 # переводим из байтов в строку
                 str_encrypt_row = encrypt_row.decode("utf-8")
                 # записываем в новый файл зашифрованные строки
-                write_file.write(str_encrypt_row)
+                write_file.write(str_encrypt_row + '\n')
         os.remove(path)
         os.rename(temp_file_name, path)
-                
-                
-            
+
     def decrypter(self, path) -> Generator:
         """Генератор для расшифровки, аналогичен encrypter'у"""
         with open(path, encoding="utf-8") as file:
             for row in file:
                 yield self.fernet.decrypt(row)
-        
+
 
 if __name__ == "__main__":
     hash_pswd_1 = Cipher.hashing("abra")

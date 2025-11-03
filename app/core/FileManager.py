@@ -1,3 +1,4 @@
+from multiprocessing import Value
 from PyQt6.QtWidgets import QTreeWidgetItem, QTreeWidget, QWidget, QVBoxLayout, QLabel
 from PyQt6.QtCore import QRect, QSize, QUrl, Qt
 from PyQt6.QtMultimedia import QSoundEffect
@@ -20,7 +21,7 @@ class FileManager:
         self.tree_expand_eff: QSoundEffect = sound_getter("tree_expand.wav")
         self.cache_manager = CacheManager()
     
-    def _clear_tree(self) -> None:
+    def clear_tree(self) -> None:
         # эта часть нужна чтобы обновить дерево файлов
         # при помторном нажатии на кнопку change
         layout = self.monitor.layout()
@@ -38,7 +39,7 @@ class FileManager:
         # но он заново нажал change, то нам следует обновить его
         if self.monitor.layout():
             self.drives = []
-            self._clear_tree()
+            self.clear_tree()
         # Создаём вспомогательный контейнер для дерева
         container = QWidget()
         container_layout = QVBoxLayout()
@@ -139,9 +140,16 @@ class FileManager:
             self.drives = ['/']  # Linux/macOS
         return self.drives
     
+    def currentItem(self):
+        item = self.tree.currentItem()
+        if not item:
+            raise ValueError("Ты пытаешься получить QTreeWidgetItem который еще не выбран юзером")
+        return item
+    
     def check_file(self) -> bool:
         item = self.tree.currentItem()
         if item:
             path = item.text(1)
             return self.cache_manager.check_path_in_cache(path)
+        return False
                 
