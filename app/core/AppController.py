@@ -5,6 +5,7 @@ from app.core.Cipher import Cipher
 from app.core.FileManager import FileManager
 from app.core.State import AuthState, Function
 from app.core.UserAuthentication import UserAuthentication
+from app.core.CONSTANTS import DEBUG, DEBUG_PASWWORD
 from app.ui import MainWindow
 
 
@@ -38,7 +39,7 @@ class AppController:
         # объект главного окна
         self.ui = ui
         # устанавливаем первый ивент в зависимости от статуса регистрации
-        self.current_event = AuthState.AUTHORIZATION if self.user_auth.check_registered() else AuthState.REGISTRATION_PSWD
+        self.current_event = AuthState.AUTHORIZATION if self.user_auth else AuthState.REGISTRATION_PSWD
         # все ивенты приложения
         # поясню за структуру: Под ключом widgets будут хранится
         # все методы которые отвечают за установку виджетов на экране
@@ -48,106 +49,207 @@ class AppController:
         # класса MainWindow через объект класса AppController методом
         # callback_redirection. Внутри этого класса данный метод не используется
         self.EVENTS = {
+            # начало регистрации, первый ввод пароля
             AuthState.REGISTRATION_PSWD: { 
                 "widgets": {
-                    "function": self.ui.widgets_controll_authentication, 
+                    "function": self.ui.set_authentication_widgets, 
                     "kwargs": {"title": "Придумай пароль"}
                 },
                 "callback": {
                     "function": self._handle_registration
                 }
             },
+            # повтор ввода пароля при регистрации
             AuthState.REGISTRATION_REPEAT_PSWD: {
                 "widgets": {
-                    "function": self.ui.widgets_controll_authentication, 
+                    "function": self.ui.set_authentication_widgets, 
                     "kwargs": {"title": "Повтори пароль"}
                 },
                 "callback": {
                     "function": self._handle_repeat_pswd_registration
                 }
             },
+            # регистрация не удалась
             AuthState.REGISTRATION_FAILURE: {
                 "widgets": {
-                    "function": self.ui.widgets_controll_authentication, 
+                    "function": self.ui.set_authentication_widgets, 
                     "kwargs": {"title": "Пароли не совпали\nПридумай пароль"}
                 },
                 "callback": {
                     "function": self._handle_registration
                 }
             },
+            # авторизация
             AuthState.AUTHORIZATION: {
                 "widgets": {
-                    "function": self.ui.widgets_controll_authentication,
+                    "function": self.ui.set_authentication_widgets,
                     "kwargs": {"title": "Введи пароль"}
                 },
                 "callback": {
                     "function": self._handle_authorization
                 }
             },
+            # авторизация не удалась
             AuthState.AUTHORIZATION_FAILURE: {
                 "widgets": {
-                    "function": self.ui.widgets_controll_authentication,
+                    "function": self.ui.set_authentication_widgets,
                     "kwargs": {"title": "Ты ввел неправильный пароль\nВведи пароль"}
                 },
                 "callback": {
                     "function": self._handle_authorization,
                 }
             },
+            # момент когда юзер зашел и ничего пока не нажал
             Function.NONE: {
                 "widgets":{
-                    "function": self.ui.widgets_controll_authentication,
+                    "function": self.ui.set_authentication_widgets,
                     "kwargs": {"is_clear": True}
                 },
                 "callback": {
                     "function": None, # в том месте просто callback не вызваем
                 }
             },
-            Function.CHANGE: {
+            # выбор файла из дерева
+            Function.CHANGE_FILE: { 
                 "widgets": {
-                    "function": self.ui.widgets_controll_tree,
+                    "function": self.ui.set_tree_widgets,
                     "kwargs": {},
                 },
                 "callback": {
                     "function": self._get_tree_item,
                 }
             },
-            Function.CHECK_FILE: {
+            # проверка файла 
+            Function.VIEW_FILE: {
                 "widgets": {
-                    "function": self.ui.widgets_controll_check_file,
-                    "kwargs": {"title": "Текущий файл"}
+                    "function": self.ui.set_change_file_widgets,
+                    "kwargs": {"title": "Текущий файл\n--------------------------------"}
                 },
                 "callback": {
-                    "function": self._cryptography,
+                    "function": None, # ничего не делаем, теперь должен решать юзер
                     "kwargs": {}
                 }
-            }
+            },
+            Function.ENCRYPT: {
+                "widgets": {
+                    "function": self.ui.set_mode_widgets,
+                    "kwargs": {}
+                },
+                "callback": {
+                    "function": self._encrypt,
+                    "kwargs": {}
+                },
+            },
+            Function.DECRYPT: {
+                "widgets": {
+                    "function": self.ui.set_mode_widgets,
+                    "kwargs": {}
+                },
+                "callback": {
+                    "function": self._decrypt,
+                    "kwargs": {}
+                }
+            },
+            Function.ENCRYPT_FAILURE: {
+                "widgets": {
+                    "function": self.ui.set_cryptography_failure_widgets,
+                    "kwargs": {
+                        "title": "Текущий файл\n--------------------------------",
+                        "status": "Неудалось зашифровать файл.\nПопробуй еще раз."
+                    }
+                },
+                "callback": {
+                    "function": None,
+                    "kwargs": {}
+                }
+            },
+            Function.DECRYPT_FAILURE: {
+                "widgets": {
+                    "function": self.ui.set_cryptography_failure_widgets,
+                    "kwargs": {
+                        "title": "Текущий файл\n--------------------------------",
+                        "status": "Неудалось расшифровать файл\nПопробуй еще раз"
+                    }
+                }
+            },
+            Function.ENCRYPT_SUCCESS: {
+                "widgets": {
+                    "function": self.ui.set_cryptography_success_widgets,
+                    "kwargs": {
+                        "title": "Текущий файл\n--------------------------------",
+                        "status": "Файл успешно зашифрован"
+                    }
+                },
+                "callback": {
+                    "function": self._encrypt,
+                    "kwargs": {}
+                }
+            },
+            Function.DECRYPT_SUCCESS: {
+                "widgets": {
+                    "function": self.ui.set_cryptography_success_widgets,
+                    "kwargs": {
+                        "title": "Текущий файл\n--------------------------------",
+                        "status": "Файл успешно расшифрован"
+                    }
+                },
+                "callback": {
+                    "function": self._decrypt,
+                    "kwargs": {}
+                }
+            },
         }
     
     def change(self) -> None:
-        self.current_event = Function.CHANGE
+        """Этот метод меняет текущий ивент на CHANGE"""
+        self.current_event = Function.CHANGE_FILE
         self._widgets_redirection()
     
-    def _cryptography(self):
+    def change_mode(self) -> None:
+        """Этот метод меняет текущий ивент на ENCRYPT или DECRYPT"""
+        # тут место, где можно проверить вхождение текущего файла в список ls
+        if self.current_event not in (Function.ENCRYPT, Function.DECRYPT):
+            self.current_event = Function.ENCRYPT
+        elif self.current_event is Function.ENCRYPT:
+            self.current_event = Function.DECRYPT
+        elif self.current_event is Function.DECRYPT:
+            self.current_event = Function.ENCRYPT
+        self._widgets_redirection()
+    
+    def _encrypt(self):
         item = self.file_manager.currentItem()
         path = item.text(1)
-        self.cipher.init_fernet()
-        self.cipher.encrypter(path)
+        try:
+            self.cipher.encrypter(path)
+            self.current_event = Function.ENCRYPT_SUCCESS
+        except:
+            self.current_event = Function.ENCRYPT_FAILURE
+        self._widgets_redirection()
+            
+    def _decrypt(self):
+        item = self.file_manager.currentItem()
+        path = item.text(1)
+        try:
+            self.cipher.decrypter(path)
+            self.current_event = Function.DECRYPT_SUCCESS
+        except:
+            self.current_event = Function.DECRYPT_FAILURE
+        self._widgets_redirection()
     
     def _get_tree_item(self):
-        print("Тут должен быть tree_item")
         item = self.file_manager.currentItem()
         if item:
-            path = item.text(1)
+            # path = item.text(1)
             filename = item.text(0)
             if filename.endswith((".txt", ".md")):
                 self.file_manager.tree.setParent(None)
-                self.current_event = Function.CHECK_FILE
-                print(f"Этот файл можно зашифровать: {path}")
+                self.current_event = Function.VIEW_FILE
+                # инициализируем путь к выбранному файлу, этот путь тебе пригодится
                 self._widgets_redirection()
     
     def _widgets_redirection(self) -> None:
         event_obj = self.EVENTS[self.current_event]["widgets"]
-        function = event_obj["function"]
+        function = event_obj.get("function", None)
         kwargs = event_obj["kwargs"]
         function(**kwargs)
 
@@ -157,11 +259,18 @@ class AppController:
         function()
     
     def define_event_authentication(self):
-        is_registered = self.user_auth.check_registered()
-        if is_registered:
-            self.current_event = AuthState.AUTHORIZATION
+        if not DEBUG:
+            if self.user_auth.is_registered:
+                self.current_event = AuthState.AUTHORIZATION
+            else:
+                self.current_event = AuthState.REGISTRATION_PSWD
         else:
-            self.current_event = AuthState.REGISTRATION_PSWD
+            # если режим отладки, то скипаем аутентификацию
+            # и устанавливаем дефолтный пароль для тестов шифровщика
+            self.current_event = Function.NONE
+            hash_pswd = self.cipher.hashing(DEBUG_PASWWORD)
+            self.cipher.set_password(hash_pswd)
+            self.cipher.init_fernet()
         self._widgets_redirection()
     
     def _handle_registration(self) -> None:

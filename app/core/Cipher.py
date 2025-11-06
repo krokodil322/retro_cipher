@@ -29,17 +29,8 @@ class Cipher:
             А потому придется пересоздавать fernet каждый раз.
             Если не передавать salt, то оно сгенерируется методом get_salt.
         """
-        self.salt = self.get_salt()
-        kdf = Scrypt(
-            salt=self.salt,
-            length=32,
-            n=pow(2, 14),
-            r=8,
-            p=1,
-            backend=default_backend()
-        )
-        key = kdf.derive(self.hash_pswd)
-        key = base64.urlsafe_b64encode(key)
+        digest = hashlib.sha256(self.hash_pswd).digest()   # 32 байта
+        key = base64.urlsafe_b64encode(digest)             # Fernet ожидает base64-ключ
         self.fernet = Fernet(key)
     
     @classmethod
@@ -60,11 +51,20 @@ class Cipher:
         input_pswd_bytes = input_pswd.encode("utf-8")
         return hashlib.sha256(input_pswd_bytes).hexdigest()
     
-    @classmethod
-    def get_salt(cls) -> bytes:
-        """Возвращает рандомную соль для шифровки"""
-        return os.urandom(16)
-    
+    def get_temp_file(self, path: str) -> str:
+        """Генерирует случайное имя файла и соединяет его с переданным путем path"""
+        while True:
+            temp_file_name = ''.join(map(choice, ascii_letters)) + ".txt"
+            root = os.path.split(path)[0]
+            temp_filename_path = os.path.join(root, temp_file_name)
+            try:
+                file = open(temp_filename_path, 'x')
+                file.close()
+                print("AAAAA")
+                continue
+            except FileExistsError:
+                return temp_filename_path
+            
     def encrypter(self, path) -> None:
         """
             Всякая шифровка будет осуществляться построчно, 
@@ -72,32 +72,29 @@ class Cipher:
             Любая запись также будет просиходить построчно.
             path - это путь к файлу который нужно зашифровать
         """
-        print(self.fernet)
-        temp_file_name = ''.join(map(choice, ascii_letters)) + ".txt"
-        root = os.path.split(path)[0]
-        temp_file_name = os.path.join(root, temp_file_name)
-        with open(path, encoding="utf-8") as read_file, open(temp_file_name, 'w', encoding="utf-8") as write_file:
-            # str_salt = self.salt.decode("utf-8")
-            # первой строкой записываем соль
-            write_file.write(str(self.salt) + '\n')
+        temp_file_name = self.get_temp_file(path)
+        with open(path, encoding="utf-8") as read_file, open(temp_file_name, 'wb') as write_file:
             for row in read_file:
                 # перед шифровокой строку нужно перевести в байты
                 bytes_row = row.encode("utf-8")
                 # шифруем
-                encrypt_row = self.fernet.encrypt(bytes_row)
-                # переводим из байтов в строку
-                str_encrypt_row = encrypt_row.decode("utf-8")
+                encrypt_row: bytes = self.fernet.encrypt(bytes_row)
                 # записываем в новый файл зашифрованные строки
-                write_file.write(str_encrypt_row + '\n')
+                write_file.write(encrypt_row)
         os.remove(path)
         os.rename(temp_file_name, path)
 
-    def decrypter(self, path) -> Generator:
-        """Генератор для расшифровки, аналогичен encrypter'у"""
-        with open(path, encoding="utf-8") as file:
-            for row in file:
-                yield self.fernet.decrypt(row)
-
+    def decrypter(self, path):
+        """Расшифровка осуществляется построчно. Аналогичен encrypter'у"""
+        temp_file_name = self.get_temp_file(path)
+        with open(path, "rb") as read_file, open(temp_file_name, 'w', encoding="utf-8") as write_file:
+            for row in read_file:
+                decrypt_row: bytes = self.fernet.decrypt(row.rstrip())
+                str_decrypt_row: str = decrypt_row.decode("utf-8")
+                write_file.write(str_decrypt_row)
+        os.remove(path)
+        os.rename(temp_file_name, path)
+                
 
 if __name__ == "__main__":
     hash_pswd_1 = Cipher.hashing("abra")

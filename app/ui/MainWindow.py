@@ -1,4 +1,5 @@
 from tkinter import CENTER
+from turtle import isvisible
 from PyQt6.QtWidgets import QMainWindow, QLabel, QPushButton, QPlainTextEdit, QTreeWidgetItem, QTreeWidget, QWidget, QVBoxLayout, QScrollArea, QLineEdit, QHBoxLayout
 from PyQt6.QtCore import Qt, QSize, QRect, QUrl, QTimer
 from PyQt6.QtGui import QPixmap, QIcon, QFontMetrics, QPalette, QColor, QPainter, QTextCursor, QFont, QFontDatabase, QCursor, QMouseEvent
@@ -13,16 +14,14 @@ import os
 
 from pymsgbox import password
 
-from app.core import FileManager, Cipher, CustomCaretLineEdit, UserAuthentication, style_getter, font_getter, AuthState, Function, button_icon_getter, sound_getter, background_getter, AppController
+from app.core import FileManager, Cipher, UserAuthentication, style_getter, font_getter, AuthState, Function, button_icon_getter, sound_getter, background_getter, CONSTANTS
+from app.core.AppController import AppController
 from app.paths import BACKGROUNDS_DIR, SOUNDS_DIR, BUTTONS_DIR
-
-# данный товарищ скипает авторизацию с регистрацией и сразу разблокирует кнопки
-DEBUG = True
 
 
 class MainWindow(QMainWindow):
     """Класс главного окна"""
-    def __init__(self, debug_mode: bool=False):
+    def __init__(self):
         super().__init__()
         # устанавливаем размер главного окна
         self.resize(467, 496)
@@ -36,19 +35,6 @@ class MainWindow(QMainWindow):
         self._mouse_old_pos = None
         # файл шрифта
         self.font_family = "3270-Regular.ttf"
-        # все ивенты в классе
-        # self.EVENTS = {
-        #     AuthState.VIEW_WIDGETS: {"method": self.widgets_controll_authentication, "args": (), "kwargs": {}, "msg": None},
-        #     AuthState.REGISTRATION_PSWD: {"method": self.handle_registration, "args": (), "kwargs": {}, "msg": "Придумай пароль"},
-        #     AuthState.REGISTRATION_REPEAT_PSWD: {"method": self.handle_repeat_pswd_registration, "args": (), "kwargs": {}, "msg": "Повтори пароль"},
-        #     AuthState.REGISTRATION_FAILURE: {"method": self.handle_registration_failure, "args": (), "kwargs": {}, "msg": "Придумай пароль(Не совпали)"},
-        #     AuthState.AUTHORIZATION: {"method": self.handle_authorization, "args": (), "kwargs": {}, "msg": "Введи пароль"},
-        #     AuthState.AUTHORIZATION_FAILURE: {"method": self.handle_authorization, "args": (), "kwargs": {}, "msg": "Неправильный пароль"},
-        #     Function.NONE: {"method": self.enable_btns, "args": (), "kwargs": {}, "msg": None},
-        #     Function.CHANGE: {"method": self.change_released, "args": (), "kwargs": {}, "msg": "Выбери файл"},
-        #     Function.CHECK_FILE: {"method": self.file_manager.check_file, "args": (), "kwargs": {}, "msg": None},
-        #     Function.DECRYPT: {"method"}
-        # }
         self.cipher = Cipher()
         self.user_auth = UserAuthentication()
         self.file_manager = FileManager(monitor=self.monitor)
@@ -59,12 +45,9 @@ class MainWindow(QMainWindow):
             file_manager=self.file_manager,
             ui=self
         )
-        if not debug_mode:
-            self.disable_btns()
-            self.controller.define_event_authentication()
-        else:
-            self.controller.current_event = Function.NONE
-        
+        self.disable_btns()
+        self.controller.define_event_authentication()
+
     def init_ui(self) -> None:
         """Инициализация кнопок и интерфейса"""        
         self.init_backgrounds()
@@ -136,6 +119,28 @@ class MainWindow(QMainWindow):
         self.enter_btn.pressed.connect(self.enter_pressed)
         self.enter_btn.released.connect(self.enter_released)
         
+        # кнопка зашифровки
+        self.encrypt_btn = QPushButton(self)
+        pixmap = QPixmap(os.path.join(BUTTONS_DIR, "encrypt_default.png"))
+        encrypt_btn_icon = QIcon(pixmap)
+        self.encrypt_btn.setIcon(encrypt_btn_icon)
+        self.encrypt_btn.setIconSize(pixmap.size())
+        self.encrypt_btn.setGeometry(33, 402, 317, 63)
+        self.encrypt_btn.pressed.connect(self.encrypt_pressed)
+        self.encrypt_btn.released.connect(self.encrypt_released)
+        self.encrypt_btn.hide()
+        
+        # кнопка расшифровки
+        self.decrypt_btn = QPushButton(self)
+        pixmap = QPixmap(os.path.join(BUTTONS_DIR, "decrypt_default.png"))
+        decrypt_btn_icon = QIcon(pixmap)
+        self.decrypt_btn.setIcon(decrypt_btn_icon)
+        self.decrypt_btn.setIconSize(pixmap.size())
+        self.decrypt_btn.setGeometry(33, 402, 317, 63)
+        self.decrypt_btn.pressed.connect(self.decrypt_pressed)
+        self.decrypt_btn.released.connect(self.decrypt_released)
+        self.decrypt_btn.hide()
+        
         # # кнопка помощи и общей информации о программе (H)
         self.help_btn = QPushButton(self)
         pixmap = QPixmap(os.path.join(BUTTONS_DIR, "help_default.png"))
@@ -167,14 +172,15 @@ class MainWindow(QMainWindow):
         self.change_btn.released.connect(self.change_released)
         
         # # кнопка для показа логов (LG)
-        self.logs_btn = QPushButton(self)
-        pixmap = QPixmap(os.path.join(BUTTONS_DIR, "logs_default.png"))
-        logs_btn_icon = QIcon(pixmap)
-        self.logs_btn.setIcon(logs_btn_icon)
-        self.logs_btn.setIconSize(pixmap.size())
-        self.logs_btn.setGeometry(377, 318, 78, 78)
-        self.logs_btn.pressed.connect(self.logs_pressed)
-        self.logs_btn.released.connect(self.logs_released)
+        self.mode_btn = QPushButton(self)
+        pixmap = QPixmap(os.path.join(BUTTONS_DIR, "mode_default.png"))
+        mode_btn_icon = QIcon(pixmap)
+        self.mode_btn.setIcon(mode_btn_icon)
+        self.mode_btn.setIconSize(pixmap.size())
+        # self.mode_btn.setGeometry(377, 318, 78, 78) старое
+        self.mode_btn.setGeometry(377, 406, 78, 78)
+        self.mode_btn.pressed.connect(self.mode_pressed)
+        self.mode_btn.released.connect(self.mode_released)
         
         # # кнопка для списка зашифрованных файлов (LS)
         self.list_btn = QPushButton(self)
@@ -182,34 +188,21 @@ class MainWindow(QMainWindow):
         list_btn_icon = QIcon(pixmap)
         self.list_btn.setIcon(list_btn_icon)
         self.list_btn.setIconSize(pixmap.size())
-        self.list_btn.setGeometry(377, 406, 78, 78)
+        # self.list_btn.setGeometry(377, 406, 78, 78) старое
+        self.list_btn.setGeometry(377, 318, 78, 78)
         self.list_btn.pressed.connect(self.list_pressed)
         self.list_btn.released.connect(self.list_released)
         
         # ссылки на функциональные кнопки окна
         self.links_funcs_btns = (
             self.help_btn, self.settings_btn, self.change_btn,
-            self.logs_btn, self.list_btn,
+            self.mode_btn, self.list_btn,
         )
             
     def init_sound_effects(self) -> None:
         # звуковые эффекты кнопок
         self.btn_press_eff = sound_getter("button.wav")
         self.close_collapse_btn_press_eff = sound_getter("collapse_close_button.wav")
-
-    def redirection_event(self) -> None:
-        """Вызывает ивент в зависимости от текущего положения сценария"""
-        args = self.EVENTS[self.current_event]["args"]
-        kwargs = self.EVENTS[self.current_event]["kwargs"]
-        response = self.EVENTS[self.current_event]["method"](*args, **kwargs)
-        if self.current_event is Function.CHECK_FILE:
-            if response is True:
-                self.current_event = Function.DECRYPT
-            else:
-                self.current_event = Function.ENCRYPT
-            self.redirection_event()
-        elif self.current_event is Function.ENCRYPT:
-            pass
         
     def enable_btns(self) -> None:
         """Разблокирует функциональные кнопки"""
@@ -230,14 +223,15 @@ class MainWindow(QMainWindow):
         """Запуска функции кнопки list после нажатия"""
         self.list_btn.setIcon(button_icon_getter("list_default.png")) 
     
-    def logs_pressed(self) -> None:
-        """Запуска функции кнопки logs в момент нажатия"""
+    def mode_pressed(self) -> None:
+        """Запуска функции кнопки mode в момент нажатия"""
         self.btn_press_eff.play()
-        self.logs_btn.setIcon(button_icon_getter("logs_pressed.png"))
+        self.mode_btn.setIcon(button_icon_getter("mode_pressed.png"))
     
-    def logs_released(self) -> None:
-        """Запуска функции кнопки logs после нажатия"""
-        self.logs_btn.setIcon(button_icon_getter("logs_default.png")) 
+    def mode_released(self) -> None:
+        """Запуска функции кнопки mode после нажатия"""
+        self.mode_btn.setIcon(button_icon_getter("mode_default.png")) 
+        self.controller.change_mode()
     
     def change_pressed(self) -> None:
         """Запуска функции кнопки change в момент нажатия"""
@@ -247,6 +241,13 @@ class MainWindow(QMainWindow):
     def change_released(self) -> None:
         """Запуска функции кнокпи change после нажатия"""
         self.change_btn.setIcon(button_icon_getter("change_default.png"))
+        self._delete_widgets()
+        if self.encrypt_btn.isVisible():
+            self.encrypt_btn.hide()
+        elif self.decrypt_btn.isVisible():
+            self.decrypt_btn.hide()
+        if self.mode_btn.isVisible():
+            self.mode_btn.setEnabled(False)
         self.enter_btn.setEnabled(True)
         self.controller.change()
         
@@ -298,21 +299,84 @@ class MainWindow(QMainWindow):
         #     self.current_event = Function.CHECK_FILE
         self.controller.callback_redirection()
 
-    def _widgets_controll_clear(self):
-        attrs = ("filename", "msg", "pswd_field")
+    def encrypt_pressed(self) -> None:
+        """Запуск функции кнопки Encrypt"""
+        self.btn_press_eff.play()
+        self.encrypt_btn.setIcon(button_icon_getter("encrypt_pressed.png"))
+        
+    def encrypt_released(self) -> None:
+        """Запуск функции кнопки Encrypt после нажатия"""
+        print("ENCRYPT_RELEASED")
+        self.encrypt_btn.setIcon(button_icon_getter("encrypt_default.png"))
+        self.controller.current_event = Function.ENCRYPT
+        self.controller.callback_redirection()
+        
+    def decrypt_pressed(self) -> None:
+        """Запуск функции кнопки Decrypt"""
+        self.btn_press_eff.play()
+        self.decrypt_btn.setIcon(button_icon_getter("decrypt_pressed.png"))
+        
+    def decrypt_released(self) -> None:
+        """Запуск функции кнопки Decrypt после нажатия"""
+        self.decrypt_btn.setIcon(button_icon_getter("decrypt_default.png"))
+        self.controller.current_event = Function.DECRYPT
+        self.controller.callback_redirection()
+
+    def _delete_widgets(self):
+        """Отчистка виджетов"""
+        attrs = ("filename", "msg", "pswd_field", "status")
         for attr in attrs:
             if hasattr(self, attr):
                 obj = getattr(self, attr)
                 obj.setParent(None)
                 delattr(self, attr)
 
-    def widgets_controll_tree(self) -> None:
-        self._widgets_controll_clear()
+    def set_mode_widgets(self) -> None:
+        """Меняет кнопку функции зашифровки/раcшифровки"""
+        if self.encrypt_btn.isVisible():
+            self.encrypt_btn.hide()
+            self.decrypt_btn.show()
+        else:
+            self.decrypt_btn.hide()
+            self.encrypt_btn.show()
+    
+    def _set_change_file_widgets(self, title: str, status: str='') -> None:
+        self._delete_widgets()
+        self.msg = QLabel(self.monitor)
+        self.msg.setText(title)
+        self.msg.setGeometry(8, 10, 300, 30)
+        self.msg.setStyleSheet("font-weight: bold;")
+        self.msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.msg.setFont(font_getter(self.font_family, 12))
+        self.msg.show()
+        # текстовое поле для названия файла
+        self.filename = QPlainTextEdit(self.monitor)
+        self.filename.setReadOnly(True)
+        self.filename.setPlainText(self.file_manager.currentItem().text(0))
+        self.filename.setGeometry(8, 35, 300, 260)
+        # переноси строки вниз
+        self.filename.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        self.filename.setStyleSheet(style_getter("filename_field.css"))
+        self.filename.setFont(font_getter(self.font_family, 12))
+        self.filename.show()
+        self.status = QLabel(self.monitor)
+        self.status.setText(f"--------------------------------\n{status}")
+        self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status.setFont(font_getter(self.font_family, 12))
+        self.status.setGeometry(8, 230, 300, 50)
+        self.status.setStyleSheet("font-weight: bold;")
+        self.status.show()
+        self.mode_btn.setEnabled(True)
+    
+    def set_tree_widgets(self) -> None:
+        """Установка виджетов дерева файлов"""
+        self._delete_widgets()
         self.controller.file_manager.set_tree()
     
-    def widgets_controll_authentication(self, title: str='', is_clear: bool=False) -> None:
+    def set_authentication_widgets(self, title: str='', is_clear: bool=False) -> None:
+        """Установка виджетов аутентификации"""
+        self._delete_widgets()
         if not is_clear:
-            self._widgets_controll_clear()
             self.msg = QLabel(self.monitor)
             self.msg.setText(title)
             self.msg.setGeometry(0, 0, 317, 40)
@@ -332,47 +396,45 @@ class MainWindow(QMainWindow):
             self.pswd_field.setFocus()
             self.pswd_field.show()
         else:
-            if not hasattr(self, "pswd_field") or not hasattr(self, "msg"):
-                raise AttributeError("Ты пытаешься удалить атрибуты msg и pswd_field которые еще не были созданы, либо уже были удалены.")
-            self.pswd_field.setParent(None)
-            self.msg.setParent(None)
-            del self.pswd_field
-            del self.msg
-            print("Я тут перерисовываю monitor!")
             self.monitor.show()
             self.enable_btns()
+            # кнопку изменения режима крипторафии пока блокируем
+            self.mode_btn.setEnabled(False)
             self.enter_btn.setEnabled(False)
     
-    def widgets_controll_check_file(self, title: str='') -> None:
-        # удалить старый виджет если есть
-        self._widgets_controll_clear()
-        # сообщение
-        self.msg = QLabel(self.monitor)
-        self.msg.setText(title)
-        self.msg.setGeometry(5, 10, 312, 12)
-        self.msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.msg.setFont(font_getter(self.font_family, 12))
-        self.msg.setStyleSheet("font-weight: bold;")
-        self.msg.show()
-        # текстовое поле для названия файла
-        self.filename = QPlainTextEdit(self.monitor)
-        self.filename.setReadOnly(True)
-        self.filename.setPlainText(self.file_manager.currentItem().text(0))
-        # Геометрия внутри дисплея (как у поля ввода раньше)
-        self.filename.setGeometry(5, 25, 312, 260)
-        # переноси строки вниз
-        self.filename.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
-        self.filename.setStyleSheet(style_getter("filename_field.css"))
-        self.filename.setFont(font_getter(self.font_family, 12))
-        self.filename.show()
+    def set_change_file_widgets(self, title: str='', status: str='') -> None:
+        """Установка виджетов выбранного файла"""
+        self._set_change_file_widgets(title, status)
+        if self.enter_btn.isVisible():
+            self.enter_btn.setEnabled(False)
+            self.encrypt_btn.show()
+
+    def set_cryptography_success_widgets(self, title: str='', status: str='') -> None:
+        self._set_change_file_widgets(title, status)
+        # if self.encrypt_btn.isVisible():
+        #     self.encrypt_btn.setDisabled(True)
+        # elif self.decrypt_btn.isVisible():
+        #     self.decrypt_btn.setDisabled(True)
+    
+    def set_cryptography_failure_widgets(self, title: str='', status: str='') -> None:
+        self._set_change_file_widgets(title, status)   
+        # if not self.encrypt_btn.isVisible():
+        #     self.encrypt_btn.setEnabled(True)
+        # elif not self.decrypt_btn.isVisible():
+        #     self.decrypt_btn.setEnabled(True)
 
     def _change_text(self) -> None:
+        """
+            Реагирование текстового поля для пароля при вводе хотябы одного симола.
+            Тогда кнопка Enter разблокируется.
+        """
         if len(self.pswd_field.text()) > 0:
             self.enter_btn.setEnabled(True)
         else:
             self.enter_btn.setEnabled(False)
 
     def get_input_password(self) -> str:
+        """Возвращает пароль из текстового поля pswd_field"""
         password = self.pswd_field.text()
         if password:
             return password

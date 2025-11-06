@@ -9,44 +9,31 @@ class ConfigManager:
         Класс отвечающий за файл config.json и папку config.
         Осуществляет проверку наличия этих файлов и создает
         их, если таковые отсутствуют.
-
-        Использовать так:
-        auth = ConfigManager()
-        config = auth.get_config()
-        
-        Но так лучше:
-        config = ConfigManager.get_config()
     """
     def __init__(self):
-        self.default = {"hash_password": ''}
-        self.config_path = os.path.join(CONFIG_DIR, "config.json")
-    
-    def _is_exist_config(self) -> bool:
-        """Проверяет существует ли файл confing.json"""
-        return os.path.exists(self.config_path)        
+        self.default: dict = {}
+        self.config_path: str = os.path.join(CONFIG_DIR, "config.json")    
 
-    def get_config(self) -> dict:
+    def get_config(self) -> dict | None:
         """
             Возвращает словарь конфига, если такой существует, иначе
             возвращает None.
         """
-        if self._is_exist_config():
+        if os.path.exists(self.config_path):
             with open(self.config_path, encoding="utf-8") as json_file:
                 config = json.load(fp=json_file)
             return config
-        else:
-            return None
+        return None
         
     def update_config(self, config: dict) -> None:
         """Устанавливает новые данные в конфиг"""
         old_config = self.get_config()
-        if not old_config:
-            raise "Ты пытаешься обновить конфиг которого пока не существует!"
+        if old_config is None:
+            raise FileNotFoundError("Ты пытаешься обновить конфиг которого пока не существует!")
         old_config.update(config)
         with open(self.config_path, 'w', encoding="utf-8") as json_file:
             json.dump(old_config, fp=json_file, indent=3, ensure_ascii=False)
         
-    
     def create_config(self) -> None:
         """
             Создает папку и файл конфига, если таковых нет
